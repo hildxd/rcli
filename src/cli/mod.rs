@@ -5,7 +5,7 @@ use clap::Parser;
 use enum_dispatch::enum_dispatch;
 
 pub use http_server::HttpOpts;
-pub use jwt::{JwtSubCommand, SignClaimOpts, VerifyOpts};
+pub use jwt::*;
 
 #[derive(Parser, Debug)]
 #[command(name = "rcli", version, author, about, long_about = None)]

@@ -11,7 +11,7 @@ use crate::{
 
 // 创建一个新类型包装 chrono::Duration
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SerializableDuration(Duration);
+pub struct SerializableDuration(pub Duration);
 
 impl SerializableDuration {
     pub fn new(duration: Duration) -> Self {
@@ -67,7 +67,8 @@ pub struct SignClaimOpts {
 
 impl CmdExector for SignClaimOpts {
     async fn execute(&self) -> Result<()> {
-        process_encode_jwt(self).await
+        process_encode_jwt(self).await?;
+        Ok(())
     }
 }
 
@@ -94,7 +95,8 @@ pub struct VerifyOpts {
 
 impl CmdExector for VerifyOpts {
     async fn execute(&self) -> Result<()> {
-        process_decode_jwt(self).await
+        process_decode_jwt(self).await?;
+        Ok(())
     }
 }
 

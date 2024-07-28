@@ -791,6 +791,7 @@ dependencies = [
  "clap",
  "enum_dispatch",
  "jsonwebtoken",
+ "lazy_static",
  "serde",
  "tokio",
  "tracing",
