@@ -50,7 +50,6 @@ async fn file_handler(
     State(state): State<Arc<HttpServeState>>,
     Path(path): Path<String>,
 ) -> (StatusCode, HtmlOrStringResponse) {
-    info!("path: {}", path);
     let p = std::path::Path::new(&state.path).join(&path);
     match p.exists() {
         false => (
