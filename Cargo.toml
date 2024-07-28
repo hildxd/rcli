@@ -14,8 +14,11 @@ axum = { version = "0.7.5", features = [
   "tracing",
   "matched-path",
 ] }
+chrono = "0.4.38"
 clap = { version = "4.5.11", features = ["derive"] }
 enum_dispatch = "0.3.13"
+jsonwebtoken = "9.3.0"
+serde = { version = "1.0.204", features = ["derive"] }
 tokio = { version = "1.39.2", features = [
   "rt",
   "rt-multi-thread",
