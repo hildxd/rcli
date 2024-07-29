@@ -1,8 +1,8 @@
-use anyhow::Result;
-use chrono::Duration;
+use anyhow::{Context, Result};
+use chrono::{Duration, Utc};
 use clap::Parser;
 use enum_dispatch::enum_dispatch;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     process::{process_decode_jwt, process_encode_jwt},
@@ -10,39 +10,6 @@ use crate::{
 };
 
 // 创建一个新类型包装 chrono::Duration
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SerializableDuration(pub Duration);
-
-impl SerializableDuration {
-    pub fn new(duration: Duration) -> Self {
-        SerializableDuration(duration)
-    }
-
-    pub fn into_inner(self) -> Duration {
-        self.0
-    }
-}
-
-// 为新类型实现 Serialize
-impl Serialize for SerializableDuration {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let nanos = self.0.num_nanoseconds().unwrap_or(i64::MAX);
-        serializer.serialize_i64(nanos)
-    }
-}
-
-impl<'de> Deserialize<'de> for SerializableDuration {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let nanos = i64::deserialize(deserializer)?;
-        Ok(SerializableDuration(Duration::nanoseconds(nanos)))
-    }
-}
 
 #[derive(Debug, Parser)]
 #[enum_dispatch(CmdExector)]
@@ -59,8 +26,8 @@ pub struct SignClaimOpts {
     pub sub: String,
     #[arg(long, short)]
     pub aud: String,
-    #[arg(long, short, value_parser = parse_duration)]
-    pub exp: SerializableDuration,
+    #[arg(long, short, value_parser = parse_exp)]
+    pub exp: usize,
     #[arg(long, default_value = "asdiuop123")]
     pub secret: String,
 }
@@ -72,17 +39,26 @@ impl CmdExector for SignClaimOpts {
     }
 }
 
-fn parse_duration(s: &str) -> Result<SerializableDuration> {
+fn parse_duration(s: &str) -> Result<Duration> {
     let len = s.len();
     let (num, unit) = s.split_at(len - 1);
     let num: usize = num.parse()?;
     match unit {
-        "s" => Ok(SerializableDuration(Duration::seconds(num as i64))),
-        "m" => Ok(SerializableDuration(Duration::minutes(num as i64))),
-        "h" => Ok(SerializableDuration(Duration::hours(num as i64))),
-        "d" => Ok(SerializableDuration(Duration::days(num as i64))),
+        "s" => Ok(Duration::seconds(num as i64)),
+        "m" => Ok(Duration::minutes(num as i64)),
+        "h" => Ok(Duration::hours(num as i64)),
+        "d" => Ok(Duration::days(num as i64)),
         _ => anyhow::bail!("Invalid duration unit. Use d, h, m, or s."),
     }
+}
+
+fn parse_exp(s: &str) -> Result<usize> {
+    let duration = parse_duration(s)?;
+    let expiration = Utc::now()
+        .checked_add_signed(duration)
+        .context("Invilid duration")?
+        .timestamp();
+    Ok(expiration as usize)
 }
 
 #[derive(Debug, Parser)]
@@ -105,26 +81,11 @@ mod tests {
     use super::*;
     #[test]
     fn test_parse_duration() {
-        assert_eq!(
-            parse_duration("1s").unwrap(),
-            SerializableDuration(Duration::seconds(1))
-        );
-        assert_eq!(
-            parse_duration("1m").unwrap(),
-            SerializableDuration(Duration::minutes(1))
-        );
-        assert_eq!(
-            parse_duration("1h").unwrap(),
-            SerializableDuration(Duration::hours(1))
-        );
-        assert_eq!(
-            parse_duration("1d").unwrap(),
-            SerializableDuration(Duration::days(1))
-        );
-        assert_eq!(
-            parse_duration("12d").unwrap(),
-            SerializableDuration(Duration::days(12))
-        );
+        assert_eq!(parse_duration("1s").unwrap(), Duration::seconds(1));
+        assert_eq!(parse_duration("1m").unwrap(), Duration::minutes(1));
+        assert_eq!(parse_duration("1h").unwrap(), Duration::hours(1));
+        assert_eq!(parse_duration("1d").unwrap(), Duration::days(1));
+        assert_eq!(parse_duration("12d").unwrap(), Duration::days(12));
         assert!(parse_duration("1x").is_err());
         assert!(parse_duration("100x").is_err());
     }

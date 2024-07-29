@@ -1,26 +1,40 @@
 use crate::{SignClaimOpts, VerifyOpts};
 use anyhow::Result;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
-pub async fn process_encode_jwt(claims: &SignClaimOpts) -> Result<String> {
-    info!("encode secert {:?}", claims.secret);
-    let secret: &[u8] = claims.secret.as_bytes();
-    let token = encode::<SignClaimOpts>(
-        &Header::new(Algorithm::HS256),
-        claims,
-        &EncodingKey::from_secret(secret),
-    )?;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub company: String,
+    pub exp: u64,
+}
+
+pub async fn process_encode_jwt(opts: &SignClaimOpts) -> Result<String> {
+    info!("encode secert {:?}", opts.secret);
+    let secret: &[u8] = opts.secret.as_bytes();
+    let header = Header {
+        kid: Some(opts.secret.clone()),
+        alg: Algorithm::HS512,
+        ..Default::default()
+    };
+    let my_claims = Claims {
+        sub: opts.sub.clone(),
+        company: opts.aud.clone(),
+        exp: opts.exp as u64,
+    };
+    let token = encode::<Claims>(&header, &my_claims, &EncodingKey::from_secret(secret))?;
     println!("{:?}", token);
     Ok(token)
 }
 
-pub async fn process_decode_jwt(opts: &VerifyOpts) -> Result<SignClaimOpts> {
+pub async fn process_decode_jwt(opts: &VerifyOpts) -> Result<Claims> {
     info!("decode secert {:?}", opts.secret);
-    let token = decode::<SignClaimOpts>(
+    let token = decode::<Claims>(
         &opts.token,
         &DecodingKey::from_secret(opts.secret.as_bytes()),
-        &Validation::new(Algorithm::HS256),
+        &Validation::new(Algorithm::HS512),
     )?;
     println!("{:?}", token.claims);
     Ok(token.claims)
@@ -28,50 +42,25 @@ pub async fn process_decode_jwt(opts: &VerifyOpts) -> Result<SignClaimOpts> {
 
 #[cfg(test)]
 mod test {
-    use std::sync::RwLock;
-
-    use chrono::Duration;
-
-    use crate::SerializableDuration;
-
-    use lazy_static::lazy_static;
-
-    lazy_static! {
-        static ref MUTABLE_TOKEN: RwLock<String> = RwLock::new(String::new());
-    }
-
     use super::*;
-    const SECRET: &str = "asdiuop123";
     #[tokio::test]
-    async fn test_process_encode_jwt() {
+    async fn test_jwt() -> Result<()> {
+        const SECRET: &str = "asdiuop123";
         let claims = SignClaimOpts {
-            exp: SerializableDuration(Duration::seconds(1)),
+            exp: 10000000000,
             secret: SECRET.to_string(),
-            sub: "test".to_string(),
-            aud: "test".to_string(),
+            sub: "sub".to_string(),
+            aud: "aud".to_string(),
         };
 
-        let token = process_encode_jwt(&claims).await;
-        match token {
-            Ok(token) => {
-                let mut write = MUTABLE_TOKEN.write().unwrap();
-                *write = token.clone();
-                assert_eq!(token, *write)
-            }
-            Err(e) => {
-                panic!("error {:?}", e);
-            }
-        };
-    }
-
-    #[tokio::test]
-    async fn test_process_decode_jwt() {
-        let token = MUTABLE_TOKEN.read().unwrap();
+        let token = process_encode_jwt(&claims).await?;
         let res = process_decode_jwt(&VerifyOpts {
             token: token.clone(),
             secret: SECRET.to_string(),
         })
-        .await;
-        assert!(res.is_ok());
+        .await?;
+        assert_eq!(res.sub, claims.sub);
+        assert_eq!(res.company, "aud");
+        Ok(())
     }
 }
